@@ -1,0 +1,12 @@
+Fitness Watch
+3
+10000
+
+Xbox controller
+15
+3000
+
+iclicker
+1
+500
+
