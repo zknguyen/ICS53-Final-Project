@@ -77,7 +77,6 @@ typedef struct list {
  */
 void insertRear(List_t* list, void* valref);
 void insertFront(List_t* list, void* valref);
-void insertInOrder(List_t* list, void* valref);
 
 /*
  * Each of these functions removes a single linkedList node from
