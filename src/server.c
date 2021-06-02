@@ -1,14 +1,62 @@
 #include "server.h"
 
-
+// ?
 static int the_number = 0;
+
+// Buffer
+char buffer[BUFFER_SIZE];
+
+// Job Queue
+List_t* jobs;
+
+// Mutexes
+sem_t user_mutex;
+sem_t auction_mutex;
+sem_t auction_id_mutex;
+sem_t job_mutex;
+
+void client_thread(user_data* client_data) {
+    int clientfd = client_data->fd;
+
+    while (clientfd >= 0) {
+        petr_header* ph = malloc(sizeof(petr_header));
+        int valid = rd_msgheader(clientfd, ph);
+        if (valid < 0) {
+            exit(EXIT_FAILURE);
+        }
+
+        // Message type
+        uint8_t msg_type = ph->msg_type;
+
+        bzero(buffer, BUFFER_SIZE);
+        // wait and read the message from client, copy it in buffer
+        int received_size = read(clientfd, buffer, ph->msg_len);
+        if (received_size < 0){
+            printf("Receiving failed\n");
+            exit(EXIT_FAILURE);
+        }
+        
+        // put job information into job data struct
+        job_data* job = malloc(sizeof(job_data));
+        job->msg_type = msg_type;
+        job->buffer = buffer;
+
+        // push job into job queue
+        insertRear(jobs, (void*)job);
+        printf("reached this line\n");
+        
+        // handle client closing connection
+        if (msg_type == LOGOUT) {
+            close(clientfd);
+        }
+    }
+
+}
 
 void run_server(int server_port){
     int sockfd, clientfd;
     socklen_t len;
     struct sockaddr_in servaddr, cli;
-
-    char buffer[BUFFER_SIZE];
 
     // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -38,61 +86,45 @@ void run_server(int server_port){
 
     while(1)
     { 
-    if ((listen(sockfd, 1)) != 0) {
-        printf("Listen failed\n");
-        exit(EXIT_FAILURE);
-    }
-    else {
-        printf("Server listening on port: %d.. Waiting for connection\n", server_port);
-    }
-    len = sizeof(cli);
-    clientfd = accept(sockfd, (SA*)&cli, &len);
-    // Wait and Accept the connection from client
-    if (clientfd < 0) {
-        printf("server acccept failed\n");
-        close(clientfd);
-        exit(EXIT_FAILURE);
-    }
-    else {
-        printf("Client connetion accepted\n");
-    }
-
-    while (clientfd >= 0) {
-        bzero(buffer, BUFFER_SIZE);
-        // wait and read the message from client, copy it in buffer
-        int received_size = read(clientfd, buffer, BUFFER_SIZE);
-        if (received_size < 0){
-            printf("Receiving failed\n");
+        if ((listen(sockfd, 1)) != 0) {
+            printf("Listen failed\n");
             exit(EXIT_FAILURE);
         }
-        // print buffer which contains the client contents
-        printf("Receive message from client: %s", buffer);
-
-        // and send that buffer to client
-        if (strncmp(buffer, "exit", 4) == 0) {
+        else {
+            printf("Server listening on port: %d.. Waiting for connection\n", server_port);
+        }
+        len = sizeof(cli);
+        clientfd = accept(sockfd, (SA*)&cli, &len);
+        // Wait and Accept the connection from client
+        if (clientfd < 0) {
+            printf("server acccept failed\n");
             close(clientfd);
-            break;
-        }
-        int ret = write(clientfd, buffer, received_size);
-        if (ret < 0){
-            printf("Sending failed\n");
             exit(EXIT_FAILURE);
         }
-        printf("Send the message back to client: %s", buffer);
+        else {
+            printf("Client connetion accepted\n");
+        }
+
+        // Create user_data struct to pass to client thread
+        user_data* user = malloc(sizeof(user_data*));
+        user->fd = clientfd;
+
+        // Client thread
+        client_thread(user);
+
+        // Close the socket at the end
+        close(clientfd);
+        return;
     }
-    }//close(sockfd);
-    // Close the socket at the end
-    close(clientfd);
-    return;
 }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
     int opt;
     unsigned int port = 0;
     unsigned int num_threads = 2;
     unsigned int timer = 0;
     char* file_name = NULL;
+    jobs = (List_t*)malloc(sizeof(List_t));
 
     while ((opt = getopt(argc, argv, ":h::j:N::t:M:")) != -1) {
         switch (opt) {

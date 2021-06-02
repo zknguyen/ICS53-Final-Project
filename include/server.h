@@ -11,6 +11,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <semaphore.h>
+#include "linkedList.h"
+#include "protocol.h"
 
 #define BUFFER_SIZE 1024
 #define SA struct sockaddr

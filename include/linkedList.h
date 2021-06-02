@@ -5,10 +5,12 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 // Declare structures
 struct user_data;
 struct auction_data;
+struct job_data;
 
 /*
  * Structure for each node of the linkedList
@@ -55,6 +57,12 @@ typedef struct auction_data {
     user_data* watchers;
 } auction_data;
 
+/* Structure to hold job information
+ */
+typedef struct job_data {
+    uint8_t msg_type;
+    char* buffer;
+} job_data;
 
 /*
  * Structure for the base linkedList
