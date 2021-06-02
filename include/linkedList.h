@@ -6,11 +6,12 @@
 #include <assert.h>
 #include <stdbool.h>
 
-#define INT_MODE 0
-#define STR_MODE 1
+// Declare structures
+struct user_data;
+struct auction_data;
 
 /*
- * Structre for each node of the linkedList
+ * Structure for each node of the linkedList
  *
  * value - a pointer to the data of the node. 
  * next - a pointer to the next node in the list. 
@@ -19,6 +20,39 @@ typedef struct node {
     void* value;
     struct node* next;
 } node_t;
+
+/*
+ * Structure for user information (Users) 
+ * username - user's username
+ * password - user's password
+ * fd - file descriptor
+ * won_auctions - linked list containing auctions user has won
+ */
+typedef struct user_data {
+    char* username;
+    char* password;
+    int fd;
+    node_t* won_auctions;
+} user_data;
+
+/*
+ * Structure for auction information (Auctions)
+ * auctionid - auction's id
+ * creator - username of user who created auction
+ * item - item being auctioned
+ * ticks - number of ticks remaining
+ * highest_bid - current highest bid in auction
+ * watchers - linked list containing all users watching the auction
+ */
+typedef struct auction_data {
+    int auctionid;
+    char* creator;
+    char* item;
+    int ticks; 
+    int highest_bid;
+    user_data* watchers;
+} auction_data;
+
 
 /*
  * Structure for the base linkedList
