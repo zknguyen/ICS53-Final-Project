@@ -42,6 +42,7 @@ typedef struct user_data {
  * item - item being auctioned
  * ticks - number of ticks remaining
  * highest_bid - current highest bid in auction
+ * highest_bidder - username of highest bidder
  * watchers - linked list containing all users watching the auction
  */
 typedef struct auction_data {
@@ -50,6 +51,7 @@ typedef struct auction_data {
     char* item;
     int ticks; 
     int highest_bid;
+    char* highest_bidder;
     user_data* watchers;
 } auction_data;
 
@@ -64,8 +66,6 @@ typedef struct auction_data {
 typedef struct list {
     node_t* head;
     int length;
-    /* the comparator uses the values of the nodes directly (i.e function has to be type aware) */
-    int (*comparator)(void*, void*);
 } List_t;
 
 /* 
