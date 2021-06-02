@@ -89,15 +89,23 @@ void run_server(int server_port){
 int main(int argc, char* argv[])
 {
     int opt;
-
     unsigned int port = 0;
-    while ((opt = getopt(argc, argv, "p:n:")) != -1) {
+    unsigned int num_threads = 2;
+    unsigned int timer = 0;
+    char* file_name = NULL;
+
+    while ((opt = getopt(argc, argv, ":h::j:N::t:M:")) != -1) {
         switch (opt) {
-        case 'p':
-            port = atoi(optarg);
+        case 'h':
+            printf(USAGE_MSG);
+            return EXIT_SUCCESS;
+        case 'j':
+            fprintf(stderr, "Case j arg is: %s", optarg);
+            num_threads = atoi(optarg);
             break;
-        case 'n':
-            the_number = atoi(optarg);
+        case 't':
+            fprintf(stderr, "Case t arg is: %s", optarg);
+            timer = atoi(optarg);
             break;
         default: /* '?' */
             fprintf(stderr, "Server Application Usage: %s -p <port_number>\n",
@@ -105,11 +113,12 @@ int main(int argc, char* argv[])
             exit(EXIT_FAILURE);
         }
     }
+    port = atoi(argv[argc - 2]);
+    file_name = argv[argc - 1];
 
     if (port == 0){
         fprintf(stderr, "ERROR: Port number for server to listen is not given\n");
-        fprintf(stderr, "Server Application Usage: %s -p <port_number>\n",
-                    argv[0]);
+        fprintf(stderr, USAGE_MSG);
         exit(EXIT_FAILURE);
     }
     run_server(port);
