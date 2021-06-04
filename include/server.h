@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <semaphore.h>
+#include <pthread.h>
 #include "linkedList.h"
 #include "protocol.h"
 

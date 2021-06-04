@@ -144,3 +144,26 @@ void deleteList(List_t* list) {
     list->length = 0;
 }
 
+user_data* searchUsers(List_t* list, char* username) {
+    node_t* curr = list->head;
+    while (curr != NULL) {
+        user_data* user = (user_data*)curr->value;
+        if (strcmp(user->username, username) == 0) {
+            return user;
+        }
+        curr = curr->next;
+    }
+    return NULL;
+}
+
+user_data* validateLogin(List_t* list, char* username, char* password) {
+    node_t* curr = list->head;
+    while (curr != NULL) {
+        user_data* user = (user_data*)curr->value;
+        if ((strcmp(user->username, username) == 0) && (strcmp(user->password, password) == 0)) {
+            return user;
+        }
+        curr = curr->next;
+    }
+    return NULL;
+}

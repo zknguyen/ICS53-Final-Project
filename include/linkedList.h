@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 // Declare structures
 struct user_data;
@@ -102,6 +103,16 @@ void* removeByIndex(List_t* list, int n);
  * @param list pointer to the linkedList struct
  */
 void deleteList(List_t* list);
+
+/*
+ * Searches linked list for user with given username
+ */
+user_data* searchUsers(List_t* list, char* username);
+
+/*
+ * Validates login info (username and password) 
+ */
+user_data* validateLogin(List_t* list, char* username, char* password);
 
 /*
  * Traverse the list printing each node in the current order.

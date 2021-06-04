@@ -9,14 +9,19 @@ char buffer[BUFFER_SIZE];
 // Job Queue
 List_t* jobs;
 
+// Valid users
+List_t* valid_users;
+
 // Mutexes
 sem_t user_mutex;
 sem_t auction_mutex;
 sem_t auction_id_mutex;
 sem_t job_mutex;
 
-void client_thread(user_data* client_data) {
-    int clientfd = client_data->fd;
+void* client_thread(void* client_data) {
+    printf("reached client thread\n");
+    user_data* cd = (user_data*)client_data;
+    int clientfd = cd->fd;
 
     while (clientfd >= 0) {
         petr_header* ph = malloc(sizeof(petr_header));
@@ -43,20 +48,21 @@ void client_thread(user_data* client_data) {
 
         // push job into job queue
         insertRear(jobs, (void*)job);
-        printf("reached this line\n");
         
         // handle client closing connection
         if (msg_type == LOGOUT) {
             close(clientfd);
         }
     }
-
+    return NULL;
 }
 
 void run_server(int server_port){
     int sockfd, clientfd;
+    int retval = 0;
     socklen_t len;
     struct sockaddr_in servaddr, cli;
+    pthread_t tid;
 
     // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -103,17 +109,62 @@ void run_server(int server_port){
         }
         else {
             printf("Client connetion accepted\n");
+
+            // Read message header from new client
+            petr_header* ph = malloc(sizeof(petr_header));
+            retval = rd_msgheader(clientfd, ph);
+            if (retval < 0) {
+                printf("Receiving failed\n");
+                exit(EXIT_FAILURE);
+            }
+
+            // Read username from new client
+            bzero(buffer, BUFFER_SIZE);
+            retval = read(clientfd, buffer, ph->msg_len);
+            if (retval < 0) {
+                printf("Receiving failed\n");
+                exit(EXIT_FAILURE);
+            }
+
+            // Check the username and password
+            char* client_usr = strtok(buffer, "\r\n");
+            char* client_pw = strtok(NULL, "\r\n");
+
+            user_data* valid = searchUsers(valid_users, client_usr);
+            // Check to see if user is new
+            if (valid == NULL) {
+                // Create user_data struct to pass to client thread
+                user_data* user = malloc(sizeof(user_data*));
+                user->username = client_usr;
+                user->password = client_pw; 
+                user->fd = clientfd;
+
+                // Add user to valid_users list
+                insertRear(valid_users, (void*)user);                
+
+                // Create client thread
+                ph->msg_type = OK;
+                ph->msg_len = 0;
+                int wr = wr_msg(clientfd, ph, 0);
+                write(clientfd, ph, 0);
+                pthread_create(&tid, NULL, client_thread, (void*)user);
+            }
+            
+            // If not new, user exists, so check password
+            else {
+                // Check login info
+                user_data* validate = validateLogin(valid_users, client_usr, client_pw);
+                if (validate != NULL) {
+                    validate->fd = clientfd;
+                    
+                    // Create client thread
+                    pthread_create(&tid, NULL, client_thread, (void*)validate);
+                }
+                else {
+                    close(clientfd);
+                }
+            }
         }
-
-        // Create user_data struct to pass to client thread
-        user_data* user = malloc(sizeof(user_data*));
-        user->fd = clientfd;
-
-        // Client thread
-        client_thread(user);
-
-        // Close the socket at the end
-        close(clientfd);
         return;
     }
 }
@@ -125,6 +176,7 @@ int main(int argc, char* argv[]) {
     unsigned int timer = 0;
     char* file_name = NULL;
     jobs = (List_t*)malloc(sizeof(List_t));
+    valid_users = (List_t*)malloc(sizeof(List_t));
 
     while ((opt = getopt(argc, argv, ":h::j:N::t:M:")) != -1) {
         switch (opt) {
