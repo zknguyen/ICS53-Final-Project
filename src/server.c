@@ -92,7 +92,7 @@ void run_server(int server_port){
 
     while(1)
     { 
-        if ((listen(sockfd, 10)) != 0) {
+        if ((listen(sockfd, 333)) != 0) {
             printf("Listen failed\n");
             exit(EXIT_FAILURE);
         }
@@ -133,13 +133,15 @@ void run_server(int server_port){
             // Check to see if user is new
             if (valid == NULL) {
                 // Create user_data struct to pass to client thread
-                user_data* user = malloc(sizeof(user_data*));
-                user->username = client_usr;
-                user->password = client_pw; 
+                user_data* user = (user_data*)malloc(sizeof(user_data));
+                user->username = malloc(sizeof(strlen(client_usr)));
+                user->password = malloc(sizeof(strlen(client_pw)));
+                strcpy(user->username, client_usr);
+                strcpy(user->password, client_pw);
                 user->fd = clientfd;
 
                 // Add user to valid_users list
-                insertRear(valid_users, (void*)user);                
+                insertRear(valid_users, (void*)user);
 
                 // Create client thread
                 ph->msg_type = OK;
@@ -175,7 +177,11 @@ int main(int argc, char* argv[]) {
     unsigned int timer = 0;
     char* file_name = NULL;
     jobs = (List_t*)malloc(sizeof(List_t));
+    jobs->head = NULL;
+    jobs->length = 0;
     valid_users = (List_t*)malloc(sizeof(List_t));
+    valid_users->head = NULL;
+    valid_users->length = 0;
 
     while ((opt = getopt(argc, argv, ":h::j:N::t:M:")) != -1) {
         switch (opt) {

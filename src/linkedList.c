@@ -149,6 +149,7 @@ user_data* searchUsers(List_t* list, char* username) {
     while (curr != NULL) {
         user_data* user = (user_data*)curr->value;
         if (strcmp(user->username, username) == 0) {
+            printf("Username of : %s has been found\n", user->username);
             return user;
         }
         curr = curr->next;
