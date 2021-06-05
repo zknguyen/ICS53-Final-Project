@@ -92,7 +92,7 @@ void run_server(int server_port){
 
     while(1)
     { 
-        if ((listen(sockfd, 1)) != 0) {
+        if ((listen(sockfd, 10)) != 0) {
             printf("Listen failed\n");
             exit(EXIT_FAILURE);
         }
@@ -108,8 +108,7 @@ void run_server(int server_port){
             exit(EXIT_FAILURE);
         }
         else {
-            printf("Client connetion accepted\n");
-
+            printf("Client connection accepted\n");
             // Read message header from new client
             petr_header* ph = malloc(sizeof(petr_header));
             retval = rd_msgheader(clientfd, ph);
@@ -165,8 +164,8 @@ void run_server(int server_port){
                 }
             }
         }
-        return;
     }
+    return;
 }
 
 int main(int argc, char* argv[]) {
