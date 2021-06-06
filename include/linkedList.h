@@ -38,6 +38,26 @@ typedef struct user_data {
     node_t* won_auctions;
 } user_data;
 
+/* Structure to hold job information
+ */
+typedef struct job_data {
+    uint8_t msg_type;
+    char* buffer;
+    char* sender;
+} job_data;
+
+/*
+ * Structure for the base linkedList
+ * 
+ * head - a pointer to the first node in the list. NULL if length is 0.
+ * length - the current length of the linkedList. Must be initialized to 0.
+ * comparator - function pointer to linkedList comparator. Must be initialized!
+ */
+typedef struct list {
+    node_t* head;
+    int length;
+} List_t;
+
 /*
  * Structure for auction information (Auctions)
  * auctionid - auction's id
@@ -52,30 +72,11 @@ typedef struct auction_data {
     int auctionid;
     char* creator;
     char* item;
-    int ticks; 
+    int ticks;
     int highest_bid;
     char* highest_bidder;
-    user_data* watchers;
+    List_t* watchers;
 } auction_data;
-
-/* Structure to hold job information
- */
-typedef struct job_data {
-    uint8_t msg_type;
-    char* buffer;
-} job_data;
-
-/*
- * Structure for the base linkedList
- * 
- * head - a pointer to the first node in the list. NULL if length is 0.
- * length - the current length of the linkedList. Must be initialized to 0.
- * comparator - function pointer to linkedList comparator. Must be initialized!
- */
-typedef struct list {
-    node_t* head;
-    int length;
-} List_t;
 
 /* 
  * Each of these functions inserts the reference to the data (valref)
