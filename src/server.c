@@ -36,7 +36,6 @@ void* client_thread(void* client_data) {
 
     // Buffer for client job message
     char client_buffer[BUFFER_SIZE];
-    //petr_header* ph = malloc(sizeof(petr_header));
 
     while (clientfd >= 0) {
         petr_header* ph = malloc(sizeof(petr_header));
@@ -61,15 +60,16 @@ void* client_thread(void* client_data) {
         job->msg_type = msg_type;
         job->buffer = (char*)malloc(sizeof(ph->msg_len));
         strcpy(job->buffer, client_buffer);
+        job->senderfd = clientfd;
 
         // push job into job queue
         sem_wait(&job_mutex);
         insertRear(jobs, (void*)job);
         sem_post(&job_mutex);
         
-        if (jobs->length > 0) {
+        /*if (jobs->length > 0) {
             printf("from client: %d\n", jobs->length);
-        }
+        }*/
 
         // handle client closing connection
         if (msg_type == LOGOUT) {
@@ -90,6 +90,9 @@ void* job_thread(void* arg) {
     pthread_detach(pthread_self());
 
     while(1) {
+        // Create header to send back to client
+        petr_header* ph = malloc(sizeof(petr_header));
+
         // Take a job from job queue
         sem_wait(&job_mutex);
         if (jobs->length > 0) {
@@ -110,13 +113,23 @@ void* job_thread(void* arg) {
                 auction->watchers = (List_t*)malloc(sizeof(List_t));
 
                 // Put auction into auction list
-                printf("i hate debugging\n");
                 insertRear(auctions, (void*)auction);
                 
                 // Increment auctionid
                 auctionid++;
+                
+                // Send ANCREATE back to server
+                ph->msg_type = ANCREATE;
+                ph->msg_len = sizeof(auctionid);
+                char msg_buf[BUFFER_SIZE];
+                sprintf(msg_buf, "%d", auctionid - 1);
+                int wr = wr_msg(job->senderfd, ph, msg_buf);
+                write(job->senderfd, ph, sizeof(auctionid));
 
+
+                // Free mutex and continue
                 sem_post(&auction_mutex);
+                continue;
             }
             
             // auctionlist

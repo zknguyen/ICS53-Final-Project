@@ -44,6 +44,7 @@ typedef struct job_data {
     uint8_t msg_type;
     char* buffer;
     char* sender;
+    int senderfd;
 } job_data;
 
 /*
