@@ -18,7 +18,7 @@ List_t* auctions;
 // Mutexes
 sem_t user_mutex;
 sem_t auction_mutex;
-sem_t auction_id_mutex;
+sem_t buffer_mutex;
 sem_t job_mutex;
 
 // Global vars
@@ -67,6 +67,10 @@ void* client_thread(void* client_data) {
         insertRear(jobs, (void*)job);
         sem_post(&job_mutex);
         
+        if (jobs->length > 0) {
+            printf("from client: %d\n", jobs->length);
+        }
+
         // handle client closing connection
         if (msg_type == LOGOUT) {
             ph->msg_type = OK;
@@ -80,50 +84,57 @@ void* client_thread(void* client_data) {
     return NULL;
 }
 
+// NOTE: Calling these functions still results in a timed-out,
+// but they correctly print back to our server
 void* job_thread(void* arg) {
     pthread_detach(pthread_self());
 
     while(1) {
         // Take a job from job queue
-        job_data* job = (job_data*)removeFront(jobs);
-        printf("%d\n", job->msg_type);
-        /*if (job->msg_type == ANCREATE) {
-            sem_wait(&auction_mutex);
-            
-            // Create new auction object to pass into auction list
-            auction_data* auction = (auction_data*)malloc(sizeof(auction_data));
-            auction->auctionid = auctionid;
-            auction->creator = job->sender;
-            auction->item = strtok(job->buffer, "\r\n");
-            auction->ticks = timer;
-            auction->highest_bid = 0;
-            auction->highest_bidder = NULL;
-            auction->watchers = (List_t*)malloc(sizeof(List_t));
+        sem_wait(&job_mutex);
+        if (jobs->length > 0) {
+            job_data* job = (job_data*)removeFront(jobs);
+             
+            // createauction
+            if (job->msg_type == ANCREATE) {
+                sem_wait(&auction_mutex);
+                
+                // Create new auction object to pass into auction list
+                auction_data* auction = (auction_data*)malloc(sizeof(auction_data));
+                auction->auctionid = auctionid;
+                auction->creator = job->sender;
+                auction->item = strtok(job->buffer, "\r\n");
+                auction->ticks = timer;
+                auction->highest_bid = 0;
+                auction->highest_bidder = NULL;
+                auction->watchers = (List_t*)malloc(sizeof(List_t));
 
-            // Put auction into auction list
-            printf("i hate debugging\n");
-            insertRear(auctions, (void*)auction);
-            
-            // Increment auctionid
-            auctionid++;
+                // Put auction into auction list
+                printf("i hate debugging\n");
+                insertRear(auctions, (void*)auction);
+                
+                // Increment auctionid
+                auctionid++;
 
-            sem_post(&auction_mutex);
-        }
-
-        else if (job->msg_type == ANLIST) {
-            sem_wait(&auction_mutex);
-            
-            //
-            node_t* curr = auctions->head;
-            while (curr != NULL) {
-                auction_data* auction = (auction_data*)curr->value;
-                printf("%d\n", auctionid);
-                curr = curr->next;
+                sem_post(&auction_mutex);
             }
-            printf("this function works!\n");
-            sem_post(&auction_mutex);
-        }*/
-
+            
+            // auctionlist
+            else if (job->msg_type == ANLIST) {
+                sem_wait(&auction_mutex);
+                
+                //
+                node_t* curr = auctions->head;
+                while (curr != NULL) {
+                    auction_data* auction = (auction_data*)curr->value;
+                    printf("%d\n", auctionid);
+                    curr = curr->next;
+                }
+                printf("this function works!\n");
+                sem_post(&auction_mutex);
+            }
+        }
+        sem_post(&job_mutex);
     }
     return NULL;
 }
@@ -134,6 +145,10 @@ void run_server(int server_port, int num_job_threads){
     socklen_t len;
     struct sockaddr_in servaddr, cli;
     pthread_t tid;
+
+    jobs = (List_t*)malloc(sizeof(List_t));
+    jobs->head = NULL;
+    jobs->length = 0;
 
     // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -159,7 +174,7 @@ void run_server(int server_port, int num_job_threads){
     else
         printf("Socket successfully binded\n");
 
-    // Job threads
+    // Create job threads
     int i;
     for (i = 0; i < num_job_threads; i++) {
         pthread_create(&tid, NULL, job_thread, NULL);
@@ -260,9 +275,9 @@ int main(int argc, char* argv[]) {
     timer = 0;
     file_name = NULL;
     auctionid = 0;
-    jobs = (List_t*)malloc(sizeof(List_t));
-    jobs->head = NULL;
-    jobs->length = 0;
+    //jobs = (List_t*)malloc(sizeof(List_t));
+    //jobs->head = NULL;
+    //jobs->length = 0;
     valid_users = (List_t*)malloc(sizeof(List_t));
     valid_users->head = NULL;
     valid_users->length = 0;
@@ -273,7 +288,7 @@ int main(int argc, char* argv[]) {
     // Initialize semaphores
     sem_init(&user_mutex, 0, 1);
     sem_init(&auction_mutex, 0, 1);
-    sem_init(&auction_id_mutex, 0, 1);
+    sem_init(&buffer_mutex, 0, 1);
     sem_init(&job_mutex, 0, 1);
 
     while ((opt = getopt(argc, argv, ":h::j:N::t:M:")) != -1) {
