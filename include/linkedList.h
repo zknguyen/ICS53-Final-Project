@@ -76,6 +76,7 @@ typedef struct auction_data {
     int ticks;
     int highest_bid;
     char* highest_bidder;
+    int bin;
     List_t* watchers;
 } auction_data;
 

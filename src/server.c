@@ -61,6 +61,7 @@ void* client_thread(void* client_data) {
         job->buffer = (char*)malloc(sizeof(ph->msg_len));
         strcpy(job->buffer, client_buffer);
         job->senderfd = clientfd;
+        printf("Adding job to queue\n");
 
         // push job into job queue
         sem_wait(&job_mutex);
@@ -76,7 +77,7 @@ void* client_thread(void* client_data) {
             ph->msg_type = OK;
             ph->msg_len = 0;
             int wr = wr_msg(clientfd, ph, 0);
-            write(clientfd, ph, 0);
+            //write(clientfd, ph, 0);
             close(clientfd);
             break;
         }
@@ -89,6 +90,8 @@ void* client_thread(void* client_data) {
 void* job_thread(void* arg) {
     pthread_detach(pthread_self());
 
+    char* msg_buf;
+
     while(1) {
         // Create header to send back to client
         petr_header* ph = malloc(sizeof(petr_header));
@@ -97,10 +100,12 @@ void* job_thread(void* arg) {
         sem_wait(&job_mutex);
         if (jobs->length > 0) {
             job_data* job = (job_data*)removeFront(jobs);
+            printf("Found job\n");
              
             // createauction
             if (job->msg_type == ANCREATE) {
                 sem_wait(&auction_mutex);
+                msg_buf = malloc(sizeof(auctionid));
                 
                 // Create new auction object to pass into auction list
                 auction_data* auction = (auction_data*)malloc(sizeof(auction_data));
@@ -110,42 +115,91 @@ void* job_thread(void* arg) {
                 auction->ticks = timer;
                 auction->highest_bid = 0;
                 auction->highest_bidder = NULL;
+                auction->bin = 123;
                 auction->watchers = (List_t*)malloc(sizeof(List_t));
+                printf("Finished making the auction\n");
 
                 // Put auction into auction list
                 insertRear(auctions, (void*)auction);
                 
-                // Increment auctionid
-                auctionid++;
-                
                 // Send ANCREATE back to server
                 ph->msg_type = ANCREATE;
                 ph->msg_len = sizeof(auctionid);
-                char msg_buf[BUFFER_SIZE];
-                sprintf(msg_buf, "%d", auctionid - 1);
+                sprintf(msg_buf, "%u", auctionid);
                 int wr = wr_msg(job->senderfd, ph, msg_buf);
-                write(job->senderfd, ph, sizeof(auctionid));
+                //write(job->senderfd, ph, sizeof(ph));
 
+                // Increment auctionid
+                auctionid++;
+
+                bzero(msg_buf, sizeof(auctionid));
 
                 // Free mutex and continue
                 sem_post(&auction_mutex);
+                sem_post(&job_mutex);
                 continue;
             }
-            
+            // int auctionid;
+            // char* creator;
+            // char* item;
+            // int ticks;
+            // int highest_bid;
+            // char* highest_bidder;
+            // int bin;
+            // List_t* watchers;
             // auctionlist
             else if (job->msg_type == ANLIST) {
                 sem_wait(&auction_mutex);
+                msg_buf = malloc(sizeof(int) + sizeof(char*) + sizeof(int) + sizeof(int) + sizeof(int) + sizeof(int));
                 
-                //
+                // need to add to file;
                 node_t* curr = auctions->head;
+                char temp[500];
                 while (curr != NULL) {
                     auction_data* auction = (auction_data*)curr->value;
-                    printf("%d\n", auctionid);
+                    sprintf(temp, "%d", auction->auctionid);
+                    strcat(msg_buf, temp);
+                    strcat(msg_buf, ";");
+                    bzero(temp, 500);
+
+                    strcat(msg_buf, auction->item);
+                    strcat(msg_buf, ";");
+                    
+                    sprintf(temp, "%d", auction->bin);
+                    strcat(msg_buf, temp);
+                    strcat(msg_buf, ";");
+                    bzero(temp, 500);
+
+                    sprintf(temp, "%d", auction->watchers->length);
+                    strcat(msg_buf, temp);
+                    strcat(msg_buf, ";");
+                    bzero(temp, 500);
+
+                    sprintf(temp, "%d", auction->highest_bid);
+                    strcat(msg_buf, temp);
+                    strcat(msg_buf, ";");
+                    bzero(temp, 500);
+
+                    sprintf(temp, "%d", auction->ticks);
+                    strcat(msg_buf, temp);
+                    strcat(msg_buf, "\n");
+                    bzero(temp, 500);
+
                     curr = curr->next;
                 }
-                printf("this function works!\n");
+                
+                // Write message back to client
+                ph->msg_type = ANLIST;
+                ph->msg_len = sizeof(msg_buf);
+                int wr = wr_msg(job->senderfd, ph, msg_buf);
+
+                bzero(msg_buf, sizeof(int) + sizeof(char*) + sizeof(int) + sizeof(int) + sizeof(int) + sizeof(int));
+
                 sem_post(&auction_mutex);
+                sem_post(&job_mutex);
+                continue;
             }
+            //free(job);
         }
         sem_post(&job_mutex);
     }
@@ -254,7 +308,7 @@ void run_server(int server_port, int num_job_threads){
                 ph->msg_type = OK;
                 ph->msg_len = 0;
                 int wr = wr_msg(clientfd, ph, 0);
-                write(clientfd, ph, 0);
+                //write(clientfd, ph, 0);
                 pthread_create(&tid, NULL, client_thread, (void*)user);
             }
             
@@ -269,7 +323,7 @@ void run_server(int server_port, int num_job_threads){
                     ph->msg_type = OK;
                     ph->msg_len = 0;
                     int wr = wr_msg(clientfd, ph, 0);
-                    write(clientfd, ph, 0);
+                    //write(clientfd, ph, 0);
                     pthread_create(&tid, NULL, client_thread, (void*)validate);
                 }
                 else {
@@ -287,7 +341,7 @@ int main(int argc, char* argv[]) {
     num_threads = 2;
     timer = 0;
     file_name = NULL;
-    auctionid = 0;
+    auctionid = 1;
     //jobs = (List_t*)malloc(sizeof(List_t));
     //jobs->head = NULL;
     //jobs->length = 0;
