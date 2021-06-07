@@ -62,6 +62,7 @@ void* client_thread(void* client_data) {
             int wr = wr_msg(clientfd, ph, 0);
             //write(clientfd, ph, 0);
             close(clientfd);
+            free(ph);
             break;
         }
         job_data* job = malloc(sizeof(job_data));
@@ -90,11 +91,12 @@ void* client_thread(void* client_data) {
 void* job_thread(void* arg) {
     pthread_detach(pthread_self());
 
-    char* msg_buf;
+    char msg_buf[BUFFER_SIZE];
 
     while(1) {
         // Create header to send back to client
         petr_header* ph = malloc(sizeof(petr_header));
+        bzero(msg_buf, BUFFER_SIZE);
 
         // Take a job from job queue
         sem_wait(&job_mutex);
@@ -105,17 +107,17 @@ void* job_thread(void* arg) {
             // createauction
             if (job->msg_type == ANCREATE) {
                 sem_wait(&auction_mutex);
-                msg_buf = malloc(sizeof(auctionid));
-                
                 // Create new auction object to pass into auction list
                 auction_data* auction = (auction_data*)malloc(sizeof(auction_data));
                 auction->auctionid = auctionid;
                 auction->creator = job->sender;
                 auction->item = strtok(job->buffer, "\r\n");
-                auction->ticks = timer;
+                auction->ticks = atoi(strtok(NULL, "\r\n"));
+                printf("ticks: %d\n", auction->ticks);
                 auction->highest_bid = 0;
                 auction->highest_bidder = NULL;
-                auction->bin = 123;
+                auction->bin = atoi(strtok(NULL, "\r\n"));
+                printf("bin: %d\n", auction->bin);
                 auction->watchers = (List_t*)malloc(sizeof(List_t));
                 printf("Finished making the auction\n");
 
@@ -124,16 +126,17 @@ void* job_thread(void* arg) {
                 
                 // Send ANCREATE back to server
                 ph->msg_type = ANCREATE;
-                ph->msg_len = sizeof(auctionid);
                 sprintf(msg_buf, "%u", auctionid);
+                ph->msg_len = strlen(msg_buf) + 1;
                 int wr = wr_msg(job->senderfd, ph, msg_buf);
                 //write(job->senderfd, ph, sizeof(ph));
 
                 // Increment auctionid
                 auctionid++;
 
-                bzero(msg_buf, sizeof(auctionid));
-
+                bzero(msg_buf, BUFFER_SIZE);
+                free(ph);
+                free(job);
                 // Free mutex and continue
                 sem_post(&auction_mutex);
                 sem_post(&job_mutex);
@@ -150,7 +153,7 @@ void* job_thread(void* arg) {
             // auctionlist
             else if (job->msg_type == ANLIST) {
                 sem_wait(&auction_mutex);
-                msg_buf = malloc(sizeof(int) + sizeof(char*) + sizeof(int) + sizeof(int) + sizeof(int) + sizeof(int));
+                bzero(msg_buf, BUFFER_SIZE);
                 
                 // need to add to file;
                 node_t* curr = auctions->head;
@@ -183,6 +186,7 @@ void* job_thread(void* arg) {
                     sprintf(temp, "%d", auction->ticks);
                     strcat(msg_buf, temp);
                     strcat(msg_buf, "\n");
+                    strcat(msg_buf, "\0");
                     bzero(temp, 500);
 
                     curr = curr->next;
@@ -190,11 +194,12 @@ void* job_thread(void* arg) {
                 
                 // Write message back to client
                 ph->msg_type = ANLIST;
-                ph->msg_len = sizeof(msg_buf);
+                ph->msg_len = strlen(msg_buf) + 1;
                 int wr = wr_msg(job->senderfd, ph, msg_buf);
 
-                bzero(msg_buf, sizeof(int) + sizeof(char*) + sizeof(int) + sizeof(int) + sizeof(int) + sizeof(int));
-
+                bzero(msg_buf, BUFFER_SIZE);
+                free(ph);
+                free(job);
                 sem_post(&auction_mutex);
                 sem_post(&job_mutex);
                 continue;
@@ -379,6 +384,12 @@ int main(int argc, char* argv[]) {
     }
     port = atoi(argv[argc - 2]);
     file_name = argv[argc - 1];
+    FILE* fd;
+    fd = fopen(file_name, "r");
+    char line[BUFFER_SIZE];
+    while (fgets(line, BUFFER_SIZE, fd) != NULL) {
+        printf("%s\n", line);
+    }
 
     if (port == 0){
         fprintf(stderr, "ERROR: Port number for server to listen is not given\n");
