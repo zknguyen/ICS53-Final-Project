@@ -168,3 +168,30 @@ user_data* validateLogin(List_t* list, char* username, char* password) {
     }
     return NULL;
 }
+
+auction_data* searchAuctions(List_t* list, int auctionid) {
+    node_t* curr = list->head;
+    while (curr != NULL) {
+        auction_data* auction = (auction_data*)curr->value;
+        if (auction->auctionid == auctionid) {
+            return auction;
+        }
+        curr = curr->next;
+    }
+    return NULL;
+}
+
+void removeWatcher(List_t* list, int fd) {
+    node_t* curr = list->head;
+    int index = 0;
+    while (curr != NULL) {
+        user_data* user = (user_data*)curr->value;
+        if (user->fd == fd) {
+            removeByIndex(list, index);
+            return;
+        }
+        index++;
+        curr = curr->next;
+    }
+    return;
+}

@@ -35,6 +35,7 @@ typedef struct user_data {
     char* username;
     char* password;
     int fd;
+    int active;
     node_t* won_auctions;
 } user_data;
 
@@ -118,11 +119,22 @@ user_data* searchUsers(List_t* list, char* username);
 user_data* validateLogin(List_t* list, char* username, char* password);
 
 /*
+ * Searches for an auction given an id, returns NULL if not found
+ */
+auction_data* searchAuctions(List_t* list, int auctionid);
+
+/*
  * Traverse the list printing each node in the current order.
  * @param list pointer to the linkedList strut
  * @param mode STR_MODE to print node.value as a string,
  * INT_MODE to print node.value as an int
  */
 void printList(List_t* list, char mode);
+
+/*
+ * Searches for a user's fd in a list and removes them
+ */
+void removeWatcher(List_t* list, int fd);
+
 
 #endif

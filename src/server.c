@@ -61,15 +61,18 @@ void* client_thread(void* client_data) {
             ph->msg_len = 0;
             int wr = wr_msg(clientfd, ph, 0);
             //write(clientfd, ph, 0);
+            cd->active = 0;
             close(clientfd);
             free(ph);
             break;
         }
         job_data* job = malloc(sizeof(job_data));
         job->msg_type = msg_type;
-        job->buffer = (char*)malloc(sizeof(ph->msg_len));
+        job->buffer = (char*)malloc(BUFFER_SIZE);
         strcpy(job->buffer, client_buffer);
         job->senderfd = clientfd;
+        job->sender = (char*)malloc(BUFFER_SIZE);
+        strcpy(job->sender, cd->username);
         printf("Adding job to queue\n");
 
         // push job into job queue
@@ -109,16 +112,53 @@ void* job_thread(void* arg) {
                 sem_wait(&auction_mutex);
                 // Create new auction object to pass into auction list
                 auction_data* auction = (auction_data*)malloc(sizeof(auction_data));
+                if (job->buffer[0] == '\r') {
+                    ph->msg_type = EINVALIDARG;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(job->senderfd, ph, NULL);
+                    free(auction);
+                    free(job->buffer);
+                    free(job->sender);
+                    free(job);
+                    sem_post(&auction_mutex);
+                    sem_post(&job_mutex);
+                    continue;
+                }
                 auction->auctionid = auctionid;
                 auction->creator = job->sender;
                 auction->item = strtok(job->buffer, "\r\n");
                 auction->ticks = atoi(strtok(NULL, "\r\n"));
+                if (auction->ticks < 1) {
+                    ph->msg_type = EINVALIDARG;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(job->senderfd, ph, NULL);
+                    free(auction);
+                    free(job->buffer);
+                    free(job->sender);
+                    free(job);
+                    sem_post(&auction_mutex);
+                    sem_post(&job_mutex);
+                    continue;
+                }
                 printf("ticks: %d\n", auction->ticks);
                 auction->highest_bid = 0;
                 auction->highest_bidder = NULL;
                 auction->bin = atoi(strtok(NULL, "\r\n"));
+                if (auction->bin < 0) {
+                    ph->msg_type = EINVALIDARG;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(job->senderfd, ph, NULL);
+                    free(auction);
+                    free(job->buffer);
+                    free(job->sender);
+                    free(job);
+                    sem_post(&auction_mutex);
+                    sem_post(&job_mutex);
+                    continue;
+                }
                 printf("bin: %d\n", auction->bin);
                 auction->watchers = (List_t*)malloc(sizeof(List_t));
+                auction->watchers->length = 0;
                 printf("Finished making the auction\n");
 
                 // Put auction into auction list
@@ -204,7 +244,62 @@ void* job_thread(void* arg) {
                 sem_post(&job_mutex);
                 continue;
             }
-            //free(job);
+            else if (job->msg_type == ANWATCH) {
+                sem_wait(&auction_mutex);
+                int id = atoi(job->buffer);
+                auction_data* found = searchAuctions(auctions, id);
+                if (found == NULL) {
+                    ph->msg_type = EANNOTFOUND;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(job->senderfd, ph, NULL);
+                    sem_post(&auction_mutex);
+                    sem_post(&job_mutex);
+                    continue;
+                }
+                char temp[500];
+                user_data* user = searchUsers(valid_users, job->sender);
+                insertRear(found->watchers, user);
+
+                bzero(msg_buf, BUFFER_SIZE);
+                strcat(msg_buf, found->item);
+                strcat(msg_buf, "\r\n");
+
+                sprintf(temp, "%d", found->bin);
+                strcat(msg_buf, temp);
+                bzero(temp, 500);
+
+                ph->msg_type = ANWATCH;
+                ph->msg_len = strlen(msg_buf) + 1;
+                int wr = wr_msg(job->senderfd, ph, msg_buf);
+
+                bzero(msg_buf, BUFFER_SIZE);
+                free(ph);
+                free(job);
+                sem_post(&auction_mutex);
+                sem_post(&job_mutex);
+                continue;
+            }
+            else if (job->msg_type == ANLEAVE) {
+                sem_wait(&auction_mutex);
+                int id = atoi(job->buffer);
+                auction_data* found = searchAuctions(auctions, id);
+                if (found == NULL) {
+                    ph->msg_type = EANNOTFOUND;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(job->senderfd, ph, NULL);
+                    sem_post(&auction_mutex);
+                    sem_post(&job_mutex);
+                    continue;
+                }
+                removeWatcher(found->watchers, job->senderfd);
+                ph->msg_type = OK;
+                ph->msg_len = 0;
+                int wr = wr_msg(job->senderfd, ph, NULL);
+                free(ph);
+                free(job);
+                sem_post(&auction_mutex);
+                sem_post(&job_mutex);
+            }
         }
         sem_post(&job_mutex);
     }
@@ -305,6 +400,7 @@ void run_server(int server_port, int num_job_threads){
                 strcpy(user->username, client_usr);
                 strcpy(user->password, client_pw);
                 user->fd = clientfd;
+                user->active = 1;
 
                 // Add user to valid_users list
                 insertRear(valid_users, (void*)user);
@@ -319,8 +415,16 @@ void run_server(int server_port, int num_job_threads){
             
             // If not new, user exists, so check password
             else {
+                // If account is logged in
+                if (valid->active == 1) {
+                    ph->msg_type = EUSRLGDIN;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(clientfd, ph, NULL);
+                    continue;
+                }
                 // Check login info
                 user_data* validate = validateLogin(valid_users, client_usr, client_pw);
+                // If login info is a match, log them in (create client thread)
                 if (validate != NULL) {
                     validate->fd = clientfd;
                     
@@ -331,7 +435,11 @@ void run_server(int server_port, int num_job_threads){
                     //write(clientfd, ph, 0);
                     pthread_create(&tid, NULL, client_thread, (void*)validate);
                 }
+                // User pw is wrong
                 else {
+                    ph->msg_type = EWRNGPWD;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(clientfd, ph, NULL);
                     close(clientfd);
                 }
             }
@@ -408,6 +516,7 @@ int main(int argc, char* argv[]) {
         fgets(line, BUFFER_SIZE, fd);
         auction->bin = atoi(strtok(line, "\n"));
         auction->watchers = (List_t*)malloc(sizeof(List_t));
+        auction->watchers->length = 0;
 
         // Skip over empty line
         fgets(line, BUFFER_SIZE, fd);
