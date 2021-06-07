@@ -387,9 +387,35 @@ int main(int argc, char* argv[]) {
     FILE* fd;
     fd = fopen(file_name, "r");
     char line[BUFFER_SIZE];
+    sem_wait(&auction_mutex);
     while (fgets(line, BUFFER_SIZE, fd) != NULL) {
-        printf("%s\n", line);
+        auction_data* auction = (auction_data*)malloc(sizeof(auction_data));
+        auction->auctionid = auctionid;
+        auction->creator = NULL;
+        // Line contains name
+        line[strlen(line) - 1] = '\0';
+        auction->item = malloc(sizeof(line));
+        strcpy(auction->item, line);
+        printf("%s", auction->item);
+        
+        // Get time duration
+        fgets(line, BUFFER_SIZE, fd);
+        auction->ticks = atoi(strtok(line, "\n"));
+        
+        auction->highest_bid = 0;
+        auction->highest_bidder = NULL;
+        
+        // Get bin
+        fgets(line, BUFFER_SIZE, fd);
+        auction->bin = atoi(strtok(line, "\n"));
+        auction->watchers = (List_t*)malloc(sizeof(List_t));
+
+        // Skip over empty line
+        fgets(line, BUFFER_SIZE, fd);
+        insertRear(auctions, auction);
+        auctionid++;
     }
+    sem_post(&auction_mutex);
 
     if (port == 0){
         fprintf(stderr, "ERROR: Port number for server to listen is not given\n");
