@@ -125,6 +125,7 @@ void* job_thread(void* arg) {
                     continue;
                 }
                 auction->auctionid = auctionid;
+                auction->creator = malloc(BUFFER_SIZE);
                 auction->creator = job->sender;
                 auction->item = strtok(job->buffer, "\r\n");
                 auction->ticks = atoi(strtok(NULL, "\r\n"));
@@ -142,7 +143,8 @@ void* job_thread(void* arg) {
                 }
                 printf("ticks: %d\n", auction->ticks);
                 auction->highest_bid = 0;
-                auction->highest_bidder = NULL;
+                auction->highest_bidder = malloc(BUFFER_SIZE);
+                auction->highest_bidder = "";
                 auction->bin = atoi(strtok(NULL, "\r\n"));
                 if (auction->bin < 0) {
                     ph->msg_type = EINVALIDARG;
@@ -182,14 +184,7 @@ void* job_thread(void* arg) {
                 sem_post(&job_mutex);
                 continue;
             }
-            // int auctionid;
-            // char* creator;
-            // char* item;
-            // int ticks;
-            // int highest_bid;
-            // char* highest_bidder;
-            // int bin;
-            // List_t* watchers;
+            
             // auctionlist
             else if (job->msg_type == ANLIST) {
                 sem_wait(&auction_mutex);
@@ -244,6 +239,8 @@ void* job_thread(void* arg) {
                 sem_post(&job_mutex);
                 continue;
             }
+
+            // watchauction
             else if (job->msg_type == ANWATCH) {
                 sem_wait(&auction_mutex);
                 int id = atoi(job->buffer);
@@ -279,6 +276,8 @@ void* job_thread(void* arg) {
                 sem_post(&job_mutex);
                 continue;
             }
+
+            // leave auction
             else if (job->msg_type == ANLEAVE) {
                 sem_wait(&auction_mutex);
                 int id = atoi(job->buffer);
@@ -299,6 +298,92 @@ void* job_thread(void* arg) {
                 free(job);
                 sem_post(&auction_mutex);
                 sem_post(&job_mutex);
+            }
+
+
+            else if (job->msg_type == ANBID) {
+                // Check to see if auction exists
+                sem_wait(&auction_mutex);
+                int id = atoi(strtok(job->buffer, "\r\n"));
+                auction_data* found = searchAuctions(auctions, id);
+                if (found == NULL) {
+                    ph->msg_type = EANNOTFOUND;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(job->senderfd, ph, NULL);
+                    sem_post(&auction_mutex);
+                    sem_post(&job_mutex);
+                    continue;
+                }
+
+                // Check to see if user is watching
+                user_data* user = searchUsers(found->watchers, job->sender);
+                if (user == NULL) {
+                    ph->msg_type = EANDENIED;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(job->senderfd, ph, NULL);
+                    sem_post(&auction_mutex);
+                    sem_post(&job_mutex);
+                    continue;
+                }
+
+                // Check to see if user created auction
+                if (strcmp(found->creator,user->username) == 0) {
+                    ph->msg_type = EANDENIED;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(job->senderfd, ph, NULL);
+                    sem_post(&auction_mutex);
+                    sem_post(&job_mutex);
+                    continue;
+                }
+
+                // Check to see if bid is a valid bid
+                int bid = atoi(strtok(NULL, "\r\n"));
+                if (bid < found->highest_bid) {
+                    ph->msg_type = EBIDLOW;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(job->senderfd, ph, NULL);
+                    sem_post(&auction_mutex);
+                    sem_post(&job_mutex);
+                    continue;
+                }
+
+                // Edit info in auction to reflect highest bidder
+                found->highest_bid = bid;
+                found->highest_bidder = malloc(sizeof(user->username));
+                strcpy(found->highest_bidder, job->sender);
+                ph->msg_type = OK;
+                ph->msg_len = 0;
+                int wr = wr_msg(job->senderfd, ph, NULL);
+                
+                free(ph);
+                ph = malloc(sizeof(petr_header));
+                // Create ANUPDATE to send to watchers
+                ph->msg_type = ANUPDATE;
+                char temp[500];
+                sprintf(temp, "%d\r\n", id);
+                strcat(msg_buf, temp);
+                strcat(msg_buf, found->item);
+                strcat(msg_buf, "\r\n");
+                strcat(msg_buf, job->sender);
+                bzero(temp, 500);
+                sprintf(temp, "\r\n%d", bid);
+                strcat(msg_buf, temp);
+                ph->msg_len = strlen(msg_buf) + 1;
+                
+                // Send ANUPDATE to all watchers of current auction
+                node_t* curr = found->watchers->head;
+                while (curr != NULL) {
+                    user_data* user = (user_data*)curr->value;
+                    int fd = user->fd;
+                    wr_msg(fd, ph, msg_buf);
+                    curr = curr->next;
+                }
+
+                free(ph);
+                free(job);
+                sem_post(&auction_mutex);
+                sem_post(&job_mutex);
+                continue;
             }
         }
         sem_post(&job_mutex);
@@ -499,7 +584,8 @@ int main(int argc, char* argv[]) {
     while (fgets(line, BUFFER_SIZE, fd) != NULL) {
         auction_data* auction = (auction_data*)malloc(sizeof(auction_data));
         auction->auctionid = auctionid;
-        auction->creator = NULL;
+        auction->creator = malloc(BUFFER_SIZE);
+        auction->creator = "";
         // Line contains name
         line[strlen(line) - 2] = '\0';
         auction->item = malloc(sizeof(line));
@@ -510,7 +596,8 @@ int main(int argc, char* argv[]) {
         auction->ticks = atoi(strtok(line, "\n"));
         
         auction->highest_bid = 0;
-        auction->highest_bidder = NULL;
+        auction->highest_bidder = malloc(BUFFER_SIZE);
+        auction->highest_bidder = "";
         
         // Get bin
         fgets(line, BUFFER_SIZE, fd);
