@@ -393,10 +393,9 @@ int main(int argc, char* argv[]) {
         auction->auctionid = auctionid;
         auction->creator = NULL;
         // Line contains name
-        line[strlen(line) - 1] = '\0';
+        line[strlen(line) - 2] = '\0';
         auction->item = malloc(sizeof(line));
         strcpy(auction->item, line);
-        printf("%s", auction->item);
         
         // Get time duration
         fgets(line, BUFFER_SIZE, fd);
