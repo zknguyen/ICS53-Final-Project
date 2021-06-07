@@ -56,6 +56,14 @@ void* client_thread(void* client_data) {
         }
         
         // put job information into job data struct
+        if (msg_type == LOGOUT) {
+            ph->msg_type = OK;
+            ph->msg_len = 0;
+            int wr = wr_msg(clientfd, ph, 0);
+            //write(clientfd, ph, 0);
+            close(clientfd);
+            break;
+        }
         job_data* job = malloc(sizeof(job_data));
         job->msg_type = msg_type;
         job->buffer = (char*)malloc(sizeof(ph->msg_len));
@@ -73,14 +81,6 @@ void* client_thread(void* client_data) {
         }*/
 
         // handle client closing connection
-        if (msg_type == LOGOUT) {
-            ph->msg_type = OK;
-            ph->msg_len = 0;
-            int wr = wr_msg(clientfd, ph, 0);
-            //write(clientfd, ph, 0);
-            close(clientfd);
-            break;
-        }
     }
     return NULL;
 }
