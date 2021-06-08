@@ -392,6 +392,8 @@ void* job_thread(void* arg) {
                 sem_post(&job_mutex);
                 continue;
             }
+
+            // userlist
             else if (job->msg_type == USRLIST) {
                 sem_wait(&user_mutex);
                 bzero(msg_buf, BUFFER_SIZE);
@@ -432,7 +434,9 @@ void* tick_thread(void* secs) {
                     auction_data* auction = (auction_data*)curr->value;
                     auction->ticks -= 1;
                     if (auction->ticks == 0) {
+                        curr = curr->next;
                         removeAuction(auctions, auction->auctionid);
+                        continue;
                     }
                     curr = curr->next;
                 }
@@ -456,7 +460,9 @@ void* tick_thread(void* secs) {
                     auction_data* auction = (auction_data*)curr->value;
                     auction->ticks -= 1;
                     if (auction->ticks == 0) {
+                        curr = curr->next;
                         removeAuction(auctions, auction->auctionid);
+                        continue;
                     }
                     curr = curr->next;
                 }
@@ -551,8 +557,8 @@ void run_server(int server_port, int num_job_threads){
             // Check the username and password
             char* client_usr = strtok(buffer, "\r\n");
             char* client_pw = strtok(NULL, "\r\n");
-            printf("%s\n", client_usr);
-            printf("%s\n", client_pw);
+            //printf("%s\n", client_usr);
+            //printf("%s\n", client_pw);
 
             user_data* valid = searchUsers(valid_users, client_usr);
             // Check to see if user is new
@@ -620,9 +626,6 @@ int main(int argc, char* argv[]) {
     timer = 0;
     file_name = NULL;
     auctionid = 1;
-    //jobs = (List_t*)malloc(sizeof(List_t));
-    //jobs->head = NULL;
-    //jobs->length = 0;
     valid_users = (List_t*)malloc(sizeof(List_t));
     valid_users->head = NULL;
     valid_users->length = 0;
