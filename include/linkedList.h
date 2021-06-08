@@ -136,5 +136,10 @@ void printList(List_t* list, char mode);
  */
 void removeWatcher(List_t* list, int fd);
 
+/*
+ * Searches for an auction and removes it
+ */
+void removeAuction(List_t* list, int id);
+
 
 #endif

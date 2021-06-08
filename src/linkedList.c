@@ -195,3 +195,18 @@ void removeWatcher(List_t* list, int fd) {
     }
     return;
 }
+
+void removeAuction(List_t* list, int id) {
+    node_t* curr = list->head;
+    int index = 0;
+    while (curr != NULL) {
+        auction_data* auction = (auction_data*)curr->value;
+        if (auction->auctionid == id) {
+            removeByIndex(list, index);
+            return;
+        }
+        index++;
+        curr = curr->next;
+    }
+    return;
+}

@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <semaphore.h>
 #include <pthread.h>
+#include <time.h>
 #include "linkedList.h"
 #include "protocol.h"
 

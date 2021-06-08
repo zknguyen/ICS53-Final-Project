@@ -110,13 +110,10 @@ void* job_thread(void* arg) {
             // createauction
             if (job->msg_type == ANCREATE) {
                 sem_wait(&auction_mutex);
-                // Create new auction object to pass into auction list
-                auction_data* auction = (auction_data*)malloc(sizeof(auction_data));
                 if (job->buffer[0] == '\r') {
                     ph->msg_type = EINVALIDARG;
                     ph->msg_len = 0;
                     int wr = wr_msg(job->senderfd, ph, NULL);
-                    free(auction);
                     free(job->buffer);
                     free(job->sender);
                     free(job);
@@ -124,6 +121,8 @@ void* job_thread(void* arg) {
                     sem_post(&job_mutex);
                     continue;
                 }
+                // Create new auction object to pass into auction list
+                auction_data* auction = (auction_data*)malloc(sizeof(auction_data));
                 auction->auctionid = auctionid;
                 auction->creator = malloc(BUFFER_SIZE);
                 auction->creator = job->sender;
@@ -193,6 +192,14 @@ void* job_thread(void* arg) {
                 // need to add to file;
                 node_t* curr = auctions->head;
                 char temp[500];
+                if (curr == NULL) {
+                    ph->msg_type = ANLIST;
+                    ph->msg_len = 0;
+                    int wr = wr_msg(job->senderfd, ph, msg_buf);
+                    sem_post(&auction_mutex);
+                    sem_post(&job_mutex);
+                    continue;
+                }
                 while (curr != NULL) {
                     auction_data* auction = (auction_data*)curr->value;
                     sprintf(temp, "%d", auction->auctionid);
@@ -385,8 +392,77 @@ void* job_thread(void* arg) {
                 sem_post(&job_mutex);
                 continue;
             }
+            else if (job->msg_type == USRLIST) {
+                sem_wait(&user_mutex);
+                bzero(msg_buf, BUFFER_SIZE);
+                node_t* curr = valid_users->head;
+                while (curr != NULL) {
+                    user_data* user = curr->value;
+                    if (user->active == 1) {
+                        strcat(msg_buf, user->username);
+                        strcat(msg_buf, "\n");
+                    }
+                    curr = curr->next;
+                }
+                ph->msg_type = USRLIST;
+                ph->msg_len = strlen(msg_buf) + 1;
+                int wr = wr_msg(job->senderfd, ph, msg_buf);
+                sem_post(&user_mutex);
+                sem_post(&job_mutex);
+                continue;
+            }
         }
         sem_post(&job_mutex);
+    }
+    return NULL;
+}
+
+void* tick_thread(void* secs) {
+    pthread_detach(pthread_self());
+
+    unsigned int timer = *(unsigned int*)secs;
+    // DEBUG MODE: tick on every STDIN from the server
+    if (timer == 0) {
+        while (1) {
+            // If enter key is pressed, then tick
+            if (getchar()) {
+                sem_wait(&auction_mutex);
+                node_t* curr = auctions->head;
+                while (curr != NULL) {
+                    auction_data* auction = (auction_data*)curr->value;
+                    auction->ticks -= 1;
+                    if (auction->ticks == 0) {
+                        removeAuction(auctions, auction->auctionid);
+                    }
+                    curr = curr->next;
+                }
+                sem_post(&auction_mutex);
+            }
+        }
+    }
+    else {
+        // Create a timer to get seconds passed
+        time_t start, end;
+        while (1) {
+            time(&end);
+            time_t elapsed = end - start;
+            // If the timer amount has passed, then tick
+            if (elapsed >= timer) {
+                //printf("Ticking right now right here right now oh yea baby\n");
+                start = end;
+                sem_wait(&auction_mutex);
+                node_t* curr = auctions->head;
+                while (curr != NULL) {
+                    auction_data* auction = (auction_data*)curr->value;
+                    auction->ticks -= 1;
+                    if (auction->ticks == 0) {
+                        removeAuction(auctions, auction->auctionid);
+                    }
+                    curr = curr->next;
+                }
+                sem_post(&auction_mutex);
+            }
+        }
     }
     return NULL;
 }
@@ -431,6 +507,9 @@ void run_server(int server_port, int num_job_threads){
     for (i = 0; i < num_job_threads; i++) {
         pthread_create(&tid, NULL, job_thread, NULL);
     }
+
+    // Create tick thread
+    pthread_create(&tid, NULL, tick_thread, &timer);
 
     // Now server is ready to listen and verification
 
@@ -533,6 +612,7 @@ void run_server(int server_port, int num_job_threads){
     return;
 }
 
+
 int main(int argc, char* argv[]) {
     int opt;
     unsigned int port = 0;
@@ -580,37 +660,39 @@ int main(int argc, char* argv[]) {
     FILE* fd;
     fd = fopen(file_name, "r");
     char line[BUFFER_SIZE];
-    sem_wait(&auction_mutex);
-    while (fgets(line, BUFFER_SIZE, fd) != NULL) {
-        auction_data* auction = (auction_data*)malloc(sizeof(auction_data));
-        auction->auctionid = auctionid;
-        auction->creator = malloc(BUFFER_SIZE);
-        auction->creator = "";
-        // Line contains name
-        line[strlen(line) - 2] = '\0';
-        auction->item = malloc(sizeof(line));
-        strcpy(auction->item, line);
-        
-        // Get time duration
-        fgets(line, BUFFER_SIZE, fd);
-        auction->ticks = atoi(strtok(line, "\n"));
-        
-        auction->highest_bid = 0;
-        auction->highest_bidder = malloc(BUFFER_SIZE);
-        auction->highest_bidder = "";
-        
-        // Get bin
-        fgets(line, BUFFER_SIZE, fd);
-        auction->bin = atoi(strtok(line, "\n"));
-        auction->watchers = (List_t*)malloc(sizeof(List_t));
-        auction->watchers->length = 0;
+    if (fd != NULL) {
+        sem_wait(&auction_mutex);
+        while (fgets(line, BUFFER_SIZE, fd) != NULL) {
+            auction_data* auction = (auction_data*)malloc(sizeof(auction_data));
+            auction->auctionid = auctionid;
+            auction->creator = malloc(BUFFER_SIZE);
+            auction->creator = "";
+            // Line contains name
+            line[strlen(line) - 2] = '\0';
+            auction->item = malloc(sizeof(line));
+            strcpy(auction->item, line);
+            
+            // Get time duration
+            fgets(line, BUFFER_SIZE, fd);
+            auction->ticks = atoi(strtok(line, "\n"));
+            
+            auction->highest_bid = 0;
+            auction->highest_bidder = malloc(BUFFER_SIZE);
+            auction->highest_bidder = "";
+            
+            // Get bin
+            fgets(line, BUFFER_SIZE, fd);
+            auction->bin = atoi(strtok(line, "\n"));
+            auction->watchers = (List_t*)malloc(sizeof(List_t));
+            auction->watchers->length = 0;
 
-        // Skip over empty line
-        fgets(line, BUFFER_SIZE, fd);
-        insertRear(auctions, auction);
-        auctionid++;
+            // Skip over empty line
+            fgets(line, BUFFER_SIZE, fd);
+            insertRear(auctions, auction);
+            auctionid++;
+        }
+        sem_post(&auction_mutex);
     }
-    sem_post(&auction_mutex);
 
     if (port == 0){
         fprintf(stderr, "ERROR: Port number for server to listen is not given\n");
