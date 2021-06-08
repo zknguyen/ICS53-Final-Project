@@ -398,7 +398,7 @@ void* job_thread(void* arg) {
                 node_t* curr = valid_users->head;
                 while (curr != NULL) {
                     user_data* user = curr->value;
-                    if (user->active == 1) {
+                    if ((user->active == 1) && (strcmp(user->username,job->sender) != 0)) {
                         strcat(msg_buf, user->username);
                         strcat(msg_buf, "\n");
                     }
